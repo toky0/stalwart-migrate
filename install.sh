@@ -240,12 +240,28 @@ main() {
 }
 
 fetch() {
+    # Show a progress bar when stderr is a terminal, so a slow download is
+    # distinguishable from a stalled one. Abort transfers that stall instead
+    # of waiting forever.
     if [ "$downloader" = curl ]; then
-        curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL "$1" -o "$2"
+        if [ -t 2 ]; then
+            progress="--progress-bar"
+        else
+            progress="-s"
+        fi
+        curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fSL $progress \
+            --connect-timeout 30 --speed-limit 1024 --speed-time 60 \
+            --retry 3 --retry-delay 2 \
+            "$1" -o "$2"
     elif [ "$downloader" = wget ]; then
-        wget --https-only -q -O "$2" "$1"
+        if [ -t 2 ] && wget --help 2>&1 | grep -q -- --show-progress; then
+            progress="-q --show-progress"
+        else
+            progress="-q"
+        fi
+        wget --https-only $progress --timeout=60 --tries=3 -O "$2" "$1"
     else
-        wget -q -O "$2" "$1"
+        wget -q -T 60 -O "$2" "$1"
     fi
 }
 
